@@ -1,0 +1,121 @@
+# Small Object Detection Configuration
+
+# Model Configuration
+model:
+  name: "small_object_detector"
+  architecture: "yolov8"  # Options: yolov8, yolov9, fcos, detr, sahi
+  backbone: "resnet50"  # Options: resnet50, efficientnet_b3, cspdarknet53
+  pretrained: true
+
+  # Small object detection specific
+  fpn:
+    enabled: true
+    channels: 256
+
+  # Multi-scale feature fusion
+  feature_fusion:
+    enabled: true
+    type: "panet"  # Options: panet, bifpn, nas_fpn
+
+  # Attention mechanisms
+  attention:
+    enabled: true
+    type: "cbam"  # Options: cbam, se, eca
+
+# Data Configuration
+data:
+  img_size: [1024, 1024]  # Larger size for small objects
+  num_classes: null  # Will be set based on dataset
+  train_path: "data/raw/train"
+  val_path: "data/raw/val"
+  test_path: "data/raw/test"
+  annotations_format: "coco"  # Options: coco, yolo, pascal_voc
+
+  # Augmentation for small objects
+  augmentation:
+    mosaic: 0.5
+    mixup: 0.3
+    copy_paste: 0.5
+    flip_horizontal: 0.5
+    flip_vertical: 0.2
+    rotation: 15
+    scale_jitter: 0.5
+    color_jitter:
+      brightness: 0.2
+      contrast: 0.2
+      saturation: 0.2
+      hue: 0.1
+
+# SAHI (Slicing Aided Hyper Inference) for small objects
+sahi:
+  enabled: true
+  slice_height: 512
+  slice_width: 512
+  overlap_height_ratio: 0.2
+  overlap_width_ratio: 0.2
+  postprocess_type: "NMS"  # Options: NMS, GREEDYNMM
+  postprocess_match_threshold: 0.5
+
+# Training Configuration
+training:
+  epochs: 100
+  batch_size: 16
+  num_workers: 8
+  device: "cuda"
+  multi_gpu: false
+
+  # Optimizer
+  optimizer:
+    name: "AdamW"
+    lr: 0.001
+    weight_decay: 0.0001
+    betas: [0.9, 0.999]
+
+  # Learning rate scheduler
+  scheduler:
+    name: "CosineAnnealingWarmRestarts"
+    T_0: 10
+    T_mult: 2
+    eta_min: 0.00001
+
+  # Loss weights for small objects
+  loss:
+    bbox_loss_weight: 1.0
+    cls_loss_weight: 0.5
+    focal_loss: true  # Better for class imbalance
+    giou_loss: true  # Better for small objects
+    small_object_weight: 2.0  # Upweight small objects
+
+# Validation Configuration
+validation:
+  interval: 1
+  iou_threshold: 0.5
+  conf_threshold: 0.25
+  nms_threshold: 0.45
+
+  # Small object specific thresholds
+  small_object_conf: 0.15  # Lower confidence for small objects
+  small_object_size: 32  # Objects smaller than 32x32 pixels
+
+# Logging & Checkpointing
+logging:
+  project_name: "small-object-detection"
+  experiment_name: "exp_001"
+  log_dir: "logs"
+  use_wandb: false
+  use_tensorboard: true
+
+checkpoint:
+  dir: "checkpoints"
+  save_top_k: 3
+  monitor: "val_map"
+  mode: "max"
+
+# Inference Configuration
+inference:
+  conf_threshold: 0.25
+  iou_threshold: 0.45
+  max_det: 300  # Increased for small objects
+  agnostic_nms: false
+  visualize: true
+  save_results: true
