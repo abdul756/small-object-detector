@@ -11,6 +11,7 @@ from torch.utils.data import Dataset
 from pathlib import Path
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
+import xml.etree.ElementTree as ET
 
 
 class SmallObjectDataset(Dataset):
@@ -29,13 +30,15 @@ class SmallObjectDataset(Dataset):
         augment=True,
         format='coco',
         mosaic_prob=0.5,
-        mixup_prob=0.3
+        mixup_prob=0.3,
+        ann_dir=None  # For YOLO and VOC formats with separate annotation directories
     ):
         self.img_dir = Path(img_dir)
         self.ann_file = ann_file
+        self.ann_dir = Path(ann_dir) if ann_dir else None
         self.img_size = img_size
         self.augment = augment
-        self.format = format
+        self.format = format.lower()
         self.mosaic_prob = mosaic_prob
         self.mixup_prob = mixup_prob
 
@@ -98,12 +101,19 @@ class SmallObjectDataset(Dataset):
         # YOLO format: each image has a corresponding .txt file
         # Format: class_id x_center y_center width height (normalized)
         for img_path in self.img_dir.glob('*.jpg'):
-            ann_path = img_path.with_suffix('.txt')
+            # Handle separate annotation directory if provided
+            if self.ann_dir:
+                ann_path = self.ann_dir / (img_path.stem + '.txt')
+            else:
+                ann_path = img_path.with_suffix('.txt')
+
             if not ann_path.exists():
                 continue
 
             # Read image size
             img = cv2.imread(str(img_path))
+            if img is None:
+                continue
             h, w = img.shape[:2]
 
             bboxes = []
@@ -137,8 +147,57 @@ class SmallObjectDataset(Dataset):
 
     def _load_voc_annotations(self):
         """Load Pascal VOC format annotations"""
-        # Implementation for VOC format
-        raise NotImplementedError("Pascal VOC format not yet implemented")
+        samples = []
+        # VOC format: XML files with bounding box annotations
+        for img_path in self.img_dir.glob('*.jpg'):
+            # Handle separate annotation directory if provided
+            if self.ann_dir:
+                ann_path = self.ann_dir / (img_path.stem + '.xml')
+            else:
+                ann_path = img_path.with_suffix('.xml')
+
+            if not ann_path.exists():
+                continue
+
+            # Parse XML file
+            try:
+                tree = ET.parse(ann_path)
+                root = tree.getroot()
+
+                bboxes = []
+                labels = []
+
+                # Extract bounding boxes
+                for obj in root.findall('object'):
+                    # Get class name
+                    name = obj.find('name').text
+
+                    # For aerial person detection, map "people" to class 0
+                    # You can extend this mapping for multiple classes
+                    class_id = 0 if name.lower() in ['people', 'person'] else 0
+
+                    # Get bounding box coordinates
+                    bbox = obj.find('bndbox')
+                    xmin = float(bbox.find('xmin').text)
+                    ymin = float(bbox.find('ymin').text)
+                    xmax = float(bbox.find('xmax').text)
+                    ymax = float(bbox.find('ymax').text)
+
+                    bboxes.append([xmin, ymin, xmax, ymax])
+                    labels.append(class_id)
+
+                if len(bboxes) > 0:
+                    samples.append({
+                        'image_path': str(img_path),
+                        'bboxes': np.array(bboxes, dtype=np.float32),
+                        'labels': np.array(labels, dtype=np.int64)
+                    })
+
+            except Exception as e:
+                print(f"Error parsing {ann_path}: {e}")
+                continue
+
+        return samples
 
     def _build_transforms(self):
         """Build augmentation pipeline optimized for small objects"""

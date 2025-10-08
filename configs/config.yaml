@@ -25,11 +25,30 @@ model:
 # Data Configuration
 data:
   img_size: [1024, 1024]  # Larger size for small objects
-  num_classes: null  # Will be set based on dataset
-  train_path: "data/raw/train"
-  val_path: "data/raw/val"
-  test_path: "data/raw/test"
-  annotations_format: "coco"  # Options: coco, yolo, pascal_voc
+  num_classes: 1  # Single class: people/person for aerial view detection
+
+  # Image directories
+  train_path: "datasets/Images/Train"
+  val_path: "datasets/Images/Valid"
+  test_path: "datasets/Images/Test"
+
+  # Annotation configuration
+  annotations_format: "yolo"  # Options: coco, yolo, pascal_voc
+
+  # Annotation directories (for formats with separate annotation files)
+  train_ann_dir: "datasets/Annotations/Yolo/Train"  # For YOLO format
+  val_ann_dir: "datasets/Annotations/Yolo/Valid"
+  test_ann_dir: "datasets/Annotations/Yolo/Test"
+
+  # For COCO format, use these JSON files instead
+  train_coco_json: "datasets/Annotations/COCO/Train/Train.json"
+  val_coco_json: "datasets/Annotations/COCO/Valid/Valid.json"
+  test_coco_json: "datasets/Annotations/COCO/Test/Test.json"
+
+  # For Pascal VOC format, use these directories
+  train_voc_dir: "datasets/Annotations/VOC/Train"
+  val_voc_dir: "datasets/Annotations/VOC/Valid"
+  test_voc_dir: "datasets/Annotations/VOC/Test"
 
   # Augmentation for small objects
   augmentation:
