@@ -118,11 +118,20 @@ validation:
 
 # Logging & Checkpointing
 logging:
-  project_name: "small-object-detection"
+  project_name: "aerial-person-detection"
   experiment_name: "exp_001"
   log_dir: "logs"
-  use_wandb: false
-  use_tensorboard: true
+  use_wandb: true
+  use_tensorboard: false
+
+  # WandB specific settings
+  wandb:
+    entity: null  # Your wandb username/team (set to null to use default)
+    tags: ["aerial-view", "person-detection", "small-objects"]
+    notes: "Aerial person detection with small object optimization"
+    log_images: true
+    log_predictions: true
+    max_images_to_log: 100  # Maximum test images to visualize per epoch
 
 checkpoint:
   dir: "checkpoints"
