@@ -63,6 +63,21 @@ class Trainer:
             small_object_weight=self.config['training']['loss']['small_object_weight']
         )
 
+        # Mixed precision training (AMP)
+        self.use_amp = self.config['training'].get('use_amp', False)
+        self.scaler = torch.cuda.amp.GradScaler() if self.use_amp else None
+        if self.use_amp:
+            print("Mixed Precision Training (AMP) enabled - saves ~40% GPU memory")
+
+        # Gradient accumulation
+        self.gradient_accumulation_steps = self.config['training'].get('gradient_accumulation_steps', 1)
+        if self.gradient_accumulation_steps > 1:
+            print(f"Gradient Accumulation: {self.gradient_accumulation_steps} steps")
+            print(f"Effective batch size: {self.config['training']['batch_size'] * self.gradient_accumulation_steps}")
+
+        # Memory optimization
+        self.empty_cache_steps = self.config['training'].get('empty_cache_every_n_steps', 0)
+
         # Setup logging
         self.setup_logging()
 
@@ -145,7 +160,7 @@ class Trainer:
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
     def train_epoch(self):
-        """Train for one epoch"""
+        """Train for one epoch with AMP and gradient accumulation support"""
         self.model.train()
         total_loss = 0
         pbar = tqdm(self.train_loader, desc=f"Epoch {self.current_epoch}")
@@ -158,20 +173,37 @@ class Trainer:
                 'labels': batch['labels']
             }
 
-            # Forward pass
-            self.optimizer.zero_grad()
-            predictions = self.model(images)
+            # Forward pass with mixed precision
+            with torch.cuda.amp.autocast(enabled=self.use_amp):
+                predictions = self.model(images)
+                losses = self.criterion(predictions, targets)
+                loss = losses['total_loss']
 
-            # Compute loss
-            losses = self.criterion(predictions, targets)
-            loss = losses['total_loss']
+                # Scale loss for gradient accumulation
+                loss = loss / self.gradient_accumulation_steps
 
             # Backward pass
-            loss.backward()
-            self.optimizer.step()
+            if self.use_amp:
+                self.scaler.scale(loss).backward()
+            else:
+                loss.backward()
 
-            # Update metrics
-            total_loss += loss.item()
+            # Optimizer step (with gradient accumulation)
+            if (batch_idx + 1) % self.gradient_accumulation_steps == 0:
+                if self.use_amp:
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
+                else:
+                    self.optimizer.step()
+
+                self.optimizer.zero_grad()
+
+            # Update metrics (scale back for display)
+            total_loss += loss.item() * self.gradient_accumulation_steps
+
+            # Clear CUDA cache periodically
+            if self.empty_cache_steps > 0 and (batch_idx + 1) % self.empty_cache_steps == 0:
+                torch.cuda.empty_cache()
 
             # Update progress bar
             pbar.set_postfix({
